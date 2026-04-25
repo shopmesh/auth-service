@@ -35,3 +35,17 @@ jobs:
       git_tag: ${{ needs.build.outputs.tag }}
       tag_exists: ${{ needs.build.outputs.tag_exists }}
     secrets: inherit
+
+  # ── CD: Update Helm values so ArgoCD picks up the new image ─────────────────
+  # Runs only on direct pushes (not PRs) after the image has been pushed to GHCR.
+  update-helm:
+    needs: push
+    if: github.event_name == 'push'
+    uses: shopmesh/shared-workflows-template/.github/workflows/update-helm-values.yaml@main
+    with:
+      service_name: auth-service
+      image_tag: ${{ needs.push.outputs.tag }}
+      # develop branch → dev environment (auto-sync)
+      # main branch    → prod environment (manual sync)
+      environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    secrets: inherit
