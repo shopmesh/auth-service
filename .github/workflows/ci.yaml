@@ -3,8 +3,15 @@ name: auth-service-ci
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:     # allows manual trigger from GitHub UI
 
 jobs:
 
@@ -23,7 +30,8 @@ jobs:
     with:
       service_name: auth-service
       service_path: .
-      run_trivy: ${{ github.event_name == 'pull_request' }}
+      # Run Trivy on PRs (security gate) — also runs on push for extra safety
+      run_trivy: true
     secrets: inherit
 
   push:
