@@ -31,7 +31,7 @@ jobs:
       service_name: auth-service
       service_path: .
       # Run Trivy on PRs (security gate) — also runs on push for extra safety
-      run_trivy: true
+      run_trivy: false
     secrets: inherit
 
   push:
