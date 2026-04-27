@@ -1,25 +1,20 @@
-# auth-service CI/CD
-# Runtime: Node.js
-#
-# PR   → code-quality → build (with Trivy)
-# main → build (with Trivy) → helm update
 name: auth-service
 
 on:
   push:
-    branches: [main]
-    paths: ["auth-service/**"]
+    branches: [main, develop]
   pull_request:
     branches: [main]
-    paths: ["auth-service/**"]
 
 jobs:
   code-quality:
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/reusable/code-quality.yml
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref_name == 'develop')
+    uses: shopmesh/shared-workflows-template/.github/workflows/code-quality.yml@main
     with:
       service_name:      auth-service
-      service_path:      auth-service
+      service_path:      .
       runtime:           node
       github_event_name: ${{ github.event_name }}
     secrets:
@@ -30,10 +25,10 @@ jobs:
   build:
     needs: code-quality
     if: always() && (needs.code-quality.result == 'success' || needs.code-quality.result == 'skipped')
-    uses: ./.github/workflows/reusable/build.yml
+    uses: shopmesh/shared-workflows-template/.github/workflows/build.yml@main
     with:
       service_name: auth-service
-      service_path: auth-service
+      service_path: .
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
@@ -41,18 +36,18 @@ jobs:
   helm:
     needs: build
     if: github.ref_name == 'main' && github.event_name == 'push' && needs.build.result == 'success'
-    uses: ./.github/workflows/reusable/helm.yml
+    uses: shopmesh/shared-workflows-template/.github/workflows/helm.yml@main
     with:
       service_name: auth-service
       image_tag:    ${{ needs.build.outputs.tag }}
-      helm_repo:    priyatham753/shopmesh-infra
+      helm_repo:    shopmesh/shopmesh-infra
     secrets:
       HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
 
   notify:
     needs: [code-quality, build, helm]
     if: failure()
-    uses: ./.github/workflows/reusable/notify.yml
+    uses: shopmesh/shared-workflows-template/.github/workflows/notify.yml@main
     with:
       service_name: auth-service
     secrets:
