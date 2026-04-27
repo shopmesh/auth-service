@@ -35,7 +35,7 @@ jobs:
 
   helm:
     needs: build
-    if: github.ref_name == 'main' && github.event_name == 'push' && needs.build.result == 'success'
+    if: always() && needs.build.result == 'success' && github.ref_name == 'main' && github.event_name == 'push'
     uses: shopmesh/shared-workflows-template/.github/workflows/helm.yml@main
     with:
       service_name: auth-service
