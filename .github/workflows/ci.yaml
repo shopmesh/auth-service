@@ -41,6 +41,7 @@ jobs:
       service_name: auth-service
       image_tag:    ${{ needs.build.outputs.tag }}
       helm_repo:    shopmesh/shopmesh-infra
+      values_file:  charts/auth-service/values-prod.yaml
     secrets:
       HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
 
