@@ -1,45 +1,69 @@
-name: auth-service-ci
+name: auth-service
 
 on:
   push:
     branches: [main, develop]
-    paths:
-      - 'src/**'
-      - 'Dockerfile'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/**'
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch:     # allows manual trigger from GitHub UI
+    branches: [main]
 
 jobs:
-
-  validation:
-    uses: shopmesh/shared-workflows-template/.github/workflows/validation-ci.yaml@main
+  code-quality:
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref_name == 'develop')
+    uses: shopmesh/shared-workflows-template/.github/workflows/code-quality.yml@main
     with:
-      service_name: auth-service
-      service_path: .
-      runtime: node
+      service_name:      auth-service
+      service_path:      .
+      runtime:           node
       github_event_name: ${{ github.event_name }}
-    secrets: inherit
+    secrets:
+      SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SNYK_TOKEN:     ${{ secrets.SNYK_TOKEN }}
 
   build:
-    needs: validation
-    uses: shopmesh/shared-workflows-template/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
+    needs: code-quality
+    if: always() && (needs.code-quality.result == 'success' || needs.code-quality.result == 'skipped')
+    uses: shopmesh/shared-workflows-template/.github/workflows/build.yml@main
     with:
       service_name: auth-service
       service_path: .
-      # Run Trivy on PRs (security gate) — also runs on push for extra safety
-      run_trivy: false
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
 
-  push:
+  helm-prod:
     needs: build
-    if: github.event_name == 'push'
-    uses: shopmesh/shared-workflows-template/.github/workflows/push.yaml@main
+    if: always() && needs.build.result == 'success' && github.ref_name == 'main' && github.event_name == 'push'
+    uses: shopmesh/shared-workflows-template/.github/workflows/helm.yml@main
     with:
       service_name: auth-service
-      git_tag: ${{ needs.build.outputs.tag }}
-      tag_exists: ${{ needs.build.outputs.tag_exists }}
-    secrets: inherit
+      image_tag:    ${{ needs.build.outputs.tag }}
+      helm_repo:    shopmesh/shopmesh-infra
+      values_file:  charts/auth-service/values-prod.yaml
+    secrets:
+      HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
+
+  helm-dev:
+    needs: build
+    if: always() && needs.build.result == 'success' && github.ref_name == 'develop' && github.event_name == 'push'
+    uses: shopmesh/shared-workflows-template/.github/workflows/helm.yml@main
+    with:
+      service_name: auth-service
+      image_tag:    ${{ needs.build.outputs.tag }}
+      helm_repo:    shopmesh/shopmesh-infra
+      values_file:  charts/auth-service/values-dev.yaml
+    secrets:
+      HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
+
+  notify:
+    needs: [code-quality, build, helm-prod, helm-dev]
+    if: always() && contains(needs.*.result, 'failure')
+    uses: shopmesh/shared-workflows-template/.github/workflows/notify.yml@main
+    with:
+      service_name: auth-service
+    secrets:
+      SENDGRID_API_KEY:  ${{ secrets.SENDGRID_API_KEY }}
+      NOTIFY_FROM_EMAIL: ${{ secrets.NOTIFY_FROM_EMAIL }}
+      NOTIFY_TO_EMAIL:   ${{ secrets.NOTIFY_TO_EMAIL }}
